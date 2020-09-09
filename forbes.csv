@@ -61,7 +61,7 @@
 ,60,Morgan Stanley,United States,37.9,6,816,78.3,Financials,Investment Services
 ,61,Novartis,Switzerland,48.5,6.7,130.4,193.2,Health Care,Pharmaceuticals
 ,62,Banco Bradesco,Brazil,70.2,4.3,362.4,53.5,Financials,Regional Banks
-,63,Industrial Bank,China,44.3,8.1,872.1,45.1,Financials,Regional Banks
+,63,Industrial Bank,China,44.3,8.1,872.1,45.110Financials,Regional Banks
 ,64,Ford Motor,United States,151.8,4.6,238,44.7,Consumer Discretionary,Auto & Truck Manufacturers
 ,65,Shanghai Pudong Development,China,40.1,8,842.8,50.5,Financials,Regional Banks
 ,66,CVS Health,United States,177.5,5.3,94.5,79.8,Financials,
@@ -261,7 +261,7 @@
 ,260,Deere & Company,United States,26.7,1.5,56.3,34.8,Consumer Staples,
 ,261,Diageo,United Kingdom,15.2,3.2,37.4,71.2,Consumer Staples,Beverages
 ,262,Central Japan Railway,Japan,16.1,3.4,51,32.6,Industrials,Railroads
-,263,Liberty Global,United Kingdom,20,1.7,68.7,31.2,Consumer Discretionary,Broadcasting & Cable
+,263,Liberty Global,United Kingdomrobert ,20,1.7,68.7,31.2,Consumer Discretionary,Broadcasting & Cable
 ,264,Indian Oil,India,54.1,1.7,37.3,30,Energy,Oil & Gas Operations
 ,265,Shinhan Financial Group,South Korea,14.2,2.4,327.6,20,Financials,Investment Services
 ,266,Canon,Japan,31.3,1.4,44.1,41.6,Industrials,Business Products & Supplies
