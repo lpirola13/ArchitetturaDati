@@ -6,58 +6,37 @@ import recordlinkage as rl
 from recordlinkage.compare import String
 import time
 from recordlinkage.preprocessing import clean, phonetic
+from sklearn import metrics
+import statistics
 
 
 def weighted_sum(row):
     return 0.75 * row['Company_score'] + 0.25 * row['Sector_score']
 
 
-def merge_results(df, dfa, dfb):
-    merge = dfa.reindex(features.index, level=1).join(dfb.reindex(features.index, level=0))
+def merge_results(df, dfa, dfb, compare_threshold):
+    merge = dfa.reindex(df.index, level=1).join(dfb.reindex(df.index, level=0))
     merge['Score'] = df.apply(weighted_sum, axis=1)
     merge = merge.sort_values('Score', ascending=False)
-    merge[['Security', 'Company', 'GICS Sector', 'Sector', 'Score']].drop_duplicates(subset=['Security'], keep='first')
+    merge['Score'] = merge['Score'].apply(lambda x: 1 if x >= compare_threshold else 0)
+    merge = merge[['Security', 'Company', 'GICS Sector', 'Sector', 'Score']].drop_duplicates(subset=['Company'],
+                                                                                             keep='first')
+    merge = merge.reset_index()
+    merge = merge.sort_values('level_1')
     return merge
-
-
-def make_confusion_matrix(matches, true):
-    matches = matches[['Security', 'Company', 'GICS Sector', 'Sector', 'Score']].drop_duplicates(subset=['Security'],keep='first')
-    matches = matches.reset_index()
-    matches.loc[454:len(matches), 'level_0'] = 9999
-    matches = matches.set_index(['level_0', 'level_1'])
-    matches = matches.reset_index()
-    merge = pd.merge(true, matches, left_on='sp500', right_on='level_1')
-    merge.loc[(merge['forbes'] == merge['level_0']) & ((merge['forbes'] != 9999) & (merge['level_0'] != 9999)), 'Pred']= 'TP'
-    merge.loc[(merge['forbes'] != merge['level_0']) & ((merge['forbes'] != 9999) & (merge['level_0'] != 9999)), 'Pred']= 'FN'
-    merge.loc[(merge['forbes'] == 9999) & (merge['level_0'] == 9999), 'Pred']= 'TN'
-    merge.loc[(merge['forbes'] != 9999) & (merge['level_0'] == 9999), 'Pred'] = 'FN'
-    merge.loc[(merge['forbes'] == 9999) & (merge['level_0'] != 9999), 'Pred']= 'FP'
-    print(merge['Pred'].value_counts())
-    values = merge['Pred'].value_counts()
-    recall = values[0]/(values[0] + values[1])
-    precision = values[0]/(values[0] + values[2])
-    fmeasure = 2 * (recall * precision) / (recall + precision)
-    print('precision: ' + str(precision))
-    print('recall: ' + str(recall))
-    print('f-measure: ' + str(fmeasure))
-    return precision, recall, fmeasure
 
 
 if __name__ == "__main__":
     # READ CSV
     sp500 = pd.read_csv('sp500.csv')
     forbes = pd.read_csv('forbes.csv')
-    true = pd.read_csv('true.csv', sep=';')
-    true_columns = list(true.columns)
-    true_columns[0] = 'forbes'
-    true_columns[1] = 'sp500'
-    true.columns = true_columns
+    true = pd.read_csv('trueindex.csv')
 
     # PREPROCESSING SP500
     len(sp500)
     sp500.head()
-    fig = plt.figure(figsize=(9, 4))
-    heatmap = sns.heatmap(sp500.isnull(), cbar=False)
+    fig_sp500 = plt.figure(figsize=(9, 4))
+    heatmap_sp500 = sns.heatmap(sp500.isnull(), cbar=False)
     plt.title("SP500: Missing Values ")
     plt.savefig("MV-sp500.png", dpi=700, bbox_inches='tight')
     plt.show()
@@ -90,8 +69,8 @@ if __name__ == "__main__":
     # PREPROCESSING FORBES
     len(forbes)
     forbes.head()
-    fig = plt.figure(figsize=(9, 4))
-    heatmap = sns.heatmap(forbes.iloc[:, 1:10].isnull(), cbar=False)
+    fig_forbes = plt.figure(figsize=(9, 4))
+    heatmap_forbes = sns.heatmap(forbes.iloc[:, 1:10].isnull(), cbar=False)
     plt.title("Forbes: Missing Values ")
     plt.savefig("MV-forbes.png", dpi=700, bbox_inches='tight')
     plt.show()
@@ -122,9 +101,8 @@ if __name__ == "__main__":
     forbes_pre["Company"].str.count(r'\bthe\b').sum()
     forbes_pre['Company'] = forbes_pre["Company"].str.replace(r'\bthe\b', '', regex=True)
 
-
-    sp500_pre['Security_sort'] = phonetic(sp500_pre['Security'], method="metaphone")
-    forbes_pre['Company_sort'] = phonetic(forbes_pre['Company'], method="metaphone")
+    sp500_pre['Security_sort'] = phonetic(sp500_pre['Security'], method="soundex")
+    forbes_pre['Company_sort'] = phonetic(forbes_pre['Company'], method="soundex")
 
     len(forbes_pre[forbes_pre['Industry'].isna() | forbes_pre['Sector'].isna()])
 
@@ -136,110 +114,78 @@ if __name__ == "__main__":
 
     # SORTED NEIGHBORHOOD
     indexer = rl.Index()
-    indexer.sortedneighbourhood(left_on="Company_sort", right_on="Security_sort", window=13)
-    candidates = indexer.index(forbes_pre, sp500_pre)
+    indexer.sortedneighbourhood(left_on="Security_sort", right_on="Company_sort", window=31)
+    candidates = indexer.index(sp500_pre, forbes_pre)
     print(len(candidates))
 
-    times = np.zeros(6)
-    precision = np.zeros(6)
-    recall = np.zeros(6)
-    fmeasure = np.zeros(6)
+    mean_fmeasures = []
+    mean_times = []
+    methods = ['jaro', 'jarowinkler', 'levenshtein', 'damerau_levenshtein', 'smith_waterman', 'lcs']
+    names = ['Jaro', 'Jaro-Winkler', 'Levenshtein', 'Damerau-Levenshtein', 'Smith-Waterman', 'LCS']
 
+    i = 0
+    for method in methods:
+        print(method)
+        thresholds = [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9]
+        precisions = []
+        recalls = []
+        fmeasures = []
+        times = []
+        for threshold in thresholds:
+            compare = rl.Compare([
+                String('Security', 'Company', method=method, label="Company_score"),
+                String('GICS Sector', 'Sector', method=method, label="Sector_score")
+            ])
+            start = time.time()
+            features = compare.compute(candidates, sp500_pre, forbes_pre)
+            end = time.time()
+            times.append(end - start)
+            matches = merge_results(features, forbes, sp500, threshold)
+            precisions.append(metrics.precision_score(true['Score'], matches['Score']))
+            recalls.append(metrics.recall_score(true['Score'], matches['Score']))
+            fmeasures.append(metrics.f1_score(true['Score'], matches['Score']))
+        mean_fmeasures.append(statistics.mean(fmeasures))
+        mean_times.append(statistics.mean(times))
+        fig = plt.figure(figsize=(7, 4))
+        ax1 = fig.add_subplot(111)
+        ax1.plot(thresholds, precisions, label='Precision', color='c', linestyle='--')
+        ax1.plot(thresholds, recalls, label='Recall', color='g', linestyle='--')
+        ax1.plot(thresholds, fmeasures, label='F-measure', color='r', )
+        plt.xticks(thresholds)
+        plt.xlabel('Threshold')
+        handles, labels = ax1.get_legend_handles_labels()
+        lgd = ax1.legend(handles, labels, loc='upper center', bbox_to_anchor=(1.15, 1))
+        plt.title('Performance: ' + names[i])
+        plt.savefig(methods[i] + ".png", dpi=700, bbox_inches='tight')
+        i = i + 1
 
-    # JARO
-    compare = rl.Compare([
-        String('Company', 'Security', method='jaro', label="Company_score"),
-        String('Sector', 'GICS Sector', method='jaro', label="Sector_score")
-    ])
-    start = time.time()
-    features = compare.compute(candidates, forbes_pre, sp500_pre)
-    end = time.time()
-    times[0] = end - start
-    print("elapsed: " + str(times[0]))
-    matches = merge_results(features, sp500, forbes)
-    precision[0], recall[0], fmeasure[0] = make_confusion_matrix(matches, true)
-
-    # JARO-WINKLER
-    compare = rl.Compare([
-        String('Company', 'Security', method='jarowinkler', label="Company_score"),
-        String('Sector', 'GICS Sector', method='jarowinkler', label="Sector_score")
-    ])
-    start = time.time()
-    features = compare.compute(candidates, forbes_pre, sp500_pre)
-    end = time.time()
-    times[1] = end - start
-    print("elapsed: " + str(times[1]))
-    matches = merge_results(features, sp500, forbes)
-    precision[1], recall[1], fmeasure[1] = make_confusion_matrix(matches, true)
-
-    # LEVENSHTEIN
-    compare = rl.Compare([
-        String('Company', 'Security', method='levenshtein', label="Company_score"),
-        String('Sector', 'GICS Sector', method='levenshtein', label="Sector_score")
-    ])
-    start = time.time()
-    features = compare.compute(candidates, forbes_pre, sp500_pre)
-    end = time.time()
-    times[2] = end - start
-    print("elapsed: " + str(times[2]))
-    matches = merge_results(features, sp500, forbes)
-    precision[2], recall[2], fmeasure[2] = make_confusion_matrix(matches, true)
-
-    # DAMERAU-LEVENSHTEIN
-    compare = rl.Compare([
-        String('Company', 'Security', method='damerau_levenshtein', label="Company_score"),
-        String('Sector', 'GICS Sector', method='damerau_levenshtein', label="Sector_score")
-    ])
-    start = time.time()
-    features = compare.compute(candidates, forbes_pre, sp500_pre)
-    end = time.time()
-    times[3] = end - start
-    print("elapsed: " + str(times[3]))
-    matches = merge_results(features, sp500, forbes)
-    precision[3], recall[3], fmeasure[3] = make_confusion_matrix(matches, true)
-
-    # Q-GRAM
-    compare = rl.Compare([
-        String('Company', 'Security', method='qgram', label="Company_score"),
-        String('Sector', 'GICS Sector', method='qgram', label="Sector_score")
-    ])
-    start = time.time()
-    features = compare.compute(candidates, forbes_pre, sp500_pre)
-    end = time.time()
-    times[4] = end - start
-    print("elapsed: " + str(times[4]))
-    matches = merge_results(features, sp500, forbes)
-    precision[4], recall[4], fmeasure[4] = make_confusion_matrix(matches, true)
-
-    # COSINE
-    compare = rl.Compare([
-        String('Company', 'Security', method='cosine', label="Company_score"),
-        String('Sector', 'GICS Sector', method='cosine', label="Sector_score")
-    ])
-    start = time.time()
-    features = compare.compute(candidates, forbes_pre, sp500_pre)
-    end = time.time()
-    times[5] = end - start
-    print("elapsed: " + str(times[5]))
-    matches = merge_results(features, sp500, forbes)
-    precision[5], recall[5], fmeasure[5] = make_confusion_matrix(matches, true)
-
-    objects = ('Jaro', 'Jaro-Winkler', 'Levenshtein', 'Damerau-Levenshtein', 'Q-Gram', 'Cosine')
-    y_pos = np.arange(len(objects))
-    plt.bar(y_pos, times, align='center', alpha=0.5)
-    plt.xticks(y_pos, objects)
+    fig_times = plt.figure(figsize=(8, 4))
+    y_pos = np.arange(len(names))
+    plt.bar(y_pos, mean_times, align='center', alpha=0.5)
+    plt.xticks(y_pos, names)
     plt.xticks(rotation=90)
     plt.ylabel('time (s)')
-    plt.title('Execution time')
-    plt.show()
+    plt.title('AVG Execution time')
+    plt.savefig("times.png", dpi=700, bbox_inches='tight')
 
-    measures = pd.DataFrame({"Precision": precision
-                           ,"Recall": recall
-                           , "F-measure": fmeasure}
-                           ,index=['Jaro', 'Jaro-Winkler', 'Levenshtein', 'Damerau-Levenshtein', 'Q-Gram', 'Cosine'])
+    fig_avgfmeasures = plt.figure(figsize=(8, 4))
+    ax = fig_avgfmeasures.add_subplot(1, 1, 1)
+    mean_fmeasures = [round(x, 3) for x in mean_fmeasures]
+    table_data = pd.DataFrame(mean_fmeasures, index=names)
+    table = ax.table(cellText=table_data.values, rowLabels=table_data.index, loc='center')
+    table.set_fontsize(12)
+    table.scale(1, 3)
+    ax.axis('off')
+    fig_avgfmeasures.suptitle('AVG F-measure', fontsize=14)
+    plt.savefig("avgfmeasure.png", dpi=700, bbox_inches='tight')
 
-    ax = measures.plot.bar()
-    ax.set_ylim([0.9, 1])
-    plt.show()
-
-
+    fig_avgtimes = plt.figure(figsize=(8, 4))
+    ax = fig_avgtimes.add_subplot(1, 1, 1)
+    mean_times = [round(x, 3) for x in mean_times]
+    table_data = pd.DataFrame(mean_times, index=names)
+    table = ax.table(cellText=table_data.values, rowLabels=table_data.index, loc='center')
+    table.set_fontsize(12)
+    table.scale(0.5, 3)
+    ax.axis('off')
+    fig_avgtimes.suptitle('AVG Execution Time', fontsize=14)
+    plt.savefig("avgtime.png", dpi=700, bbox_inches='tight')

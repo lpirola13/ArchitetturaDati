@@ -1,14 +1,23 @@
 <component name="ProjectDictionaryState">
   <dictionary name="lorenzopirola">
     <words>
+      <w>avgfmeasure</w>
+      <w>avgfmeasures</w>
+      <w>avgtime</w>
+      <w>avgtimes</w>
       <w>bcorp</w>
       <w>bhldg</w>
+      <w>bhldgp</w>
       <w>binc</w>
       <w>bltd</w>
+      <w>bltdp</w>
       <w>bpcl</w>
       <w>bplc</w>
+      <w>bthe</w>
       <w>damerau</w>
       <w>datasets</w>
+      <w>fmeasure</w>
+      <w>fmeasures</w>
       <w>gics</w>
       <w>heatmap</w>
       <w>jaro</w>
@@ -16,6 +25,7 @@
       <w>metaphone</w>
       <w>preprocessing</w>
       <w>qgram</w>
+      <w>trueindex</w>
       <w>winkler</w>
     </words>
   </dictionary>
