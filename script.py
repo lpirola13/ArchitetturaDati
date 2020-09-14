@@ -126,7 +126,7 @@ if __name__ == "__main__":
     i = 0
     for method in methods:
         print(method)
-        thresholds = [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9]
+        thresholds = [0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1]
         precisions = []
         recalls = []
         fmeasures = []
