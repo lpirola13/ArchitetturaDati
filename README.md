@@ -11,9 +11,14 @@ prestazioni dei singoli metodi sono state valutate grazie a un terzo dataset, il
 </div>
 
 ## Requirements
-Install the requirements using pip:
+Per installare i requisiti:
 
     pip install -r requirements.txt
+    
+## Usage
+Per eseguire il confronto:
+
+    python3 script.py
 
 ## Data
 The datasets used are:
